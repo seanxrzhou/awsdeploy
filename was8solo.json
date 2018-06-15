@@ -123,12 +123,17 @@
 					"#!/bin/bash -ex\n",
 					"cd /tmp\n",
 					"echo Download start...\n",
-					"aws s3 cp ", {"Ref": "RepoSource"}, "/", {"Ref": "DBarchive"}, " ", {"Ref": "DBarchive"}, "\n",
-					"aws s3 cp ", {"Ref": "RepoSource"}, "/", {"Ref": "JEEapp"}, " ", {"Ref": "JEEapp"}, "\n",
-					"aws s3 cp ", {"Ref": "RepoSource"}, "/", {"Ref": "WASimage"}, " ", {"Ref": "WASimage"}, "\n",
+					"Repo=",{"Ref": "RepoSource"}\n",
+					"DBar=",{"Ref": "DBarchive"}\n",
+					"JEEa=",{"Ref": "JEEapp"}\n",
+					"WASi=",{"Ref": "WASimage"}\n",
+					"aws s3 cp ${Repo}/${DBar} ${DBar} \n",
+					"aws s3 cp ${Repo}/${JEEa} ${JEEa} \n",
+					"aws s3 cp ${Repo}/${WASi} ${WASi} \n",					
 					"echo Download finish.\n",
-					"wget https://s3.amazonaws.com/s3logme/img/was8deploy.sh && chmod 750 was8deploy.sh && ./was8deploy.sh \n",
-					"echo Deploy finish.\n"
+					"wget https://s3.amazonaws.com/s3logme/img/was8deploy.sh && chmod 750 was8deploy.sh \n",
+					"./was8deploy.sh ${WASi} ${DBar} ${JEEa} \n",
+					"rm -f was8deploy.sh; echo Deploy finish at `date`.\n"
 				]]}}
 			}
 		}
