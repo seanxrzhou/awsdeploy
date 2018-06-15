@@ -28,7 +28,7 @@
 			"Type": "String"
 		},
 		"RepoSource": {
-			"Description": "The Source to download the software, e.g, from S3 or Github ",
+			"Description": "The Source to download the software, e.g., s3://s3logme/img.",
 			"Type": "String"
 		}
 	},
