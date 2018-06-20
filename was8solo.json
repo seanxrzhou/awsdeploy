@@ -17,32 +17,31 @@
 		},
 		"WASimage": {
 			"Description": "The pre-built WebSphere Base image",
-			"Type": "String"
+			"Type": "String",
+			"Default": "was8.zip"
 		},
 		"JEEapp": {
 			"Description": "The name of J2EE applictaion ear.",
-			"Type": "String"
+			"Type": "String",
+			"Default": "pbw-ear.ear"
 		},
 		"DBarchive": {
 			"Description": "The data file to import, e.g, a Derby database archive",
-			"Type": "String"
+			"Type": "String",
+			"Default": "pbw-db.jar"		
 		},
 		"RepoSource": {
 			"Description": "The Source to download the software, e.g., s3://s3logme/img.",
-			"Type": "String"
+			"Type": "String",
+			"Default": "s3://s3logme/img"			
 		}
 	},
 	"Mappings": {
 		"EC2RegionMap": {
-			"ap-northeast-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-cbf90ecb"},
-			"ap-southeast-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-68d8e93a"},
-			"ap-southeast-2": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-fd9cecc7"},
-			"eu-central-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-a8221fb5"},
-			"eu-west-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-a10897d6"},
-			"sa-east-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-b52890a8"},
-			"us-east-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-1ecae776"},
-			"us-west-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-d114f295"},
-			"us-west-2": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-e7527ed7"}
+			"us-east-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-14c5486b"},
+			"us-east-2": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-922914f7"},
+			"us-west-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-25110f45"},
+			"us-west-2": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-e251209a"}
 		}
 	},
 	"Resources": {
@@ -69,7 +68,13 @@
 						"FromPort": "9043",
 						"ToPort": "9043",
 						"CidrIp": "0.0.0.0/0"
-					}
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": "9080",
+						"ToPort": "9080",
+						"CidrIp": "0.0.0.0/0"
+					}					
 				]
 			}
 		},
@@ -123,10 +128,10 @@
 					"#!/bin/bash -ex\n",
 					"cd /tmp\n",
 					"echo Download start...\n",
-					"Repo=",{"Ref": "RepoSource"}\n",
-					"DBar=",{"Ref": "DBarchive"}\n",
-					"JEEa=",{"Ref": "JEEapp"}\n",
-					"WASi=",{"Ref": "WASimage"}\n",
+					"Repo=", {"Ref": "RepoSource"}, "\n",
+					"DBar=", {"Ref": "DBarchive"}, "\n",
+					"JEEa=",{"Ref": "JEEapp"}, "\n",
+					"WASi=",{"Ref": "WASimage"}, "\n",
 					"aws s3 cp ${Repo}/${DBar} ${DBar} \n",
 					"aws s3 cp ${Repo}/${JEEa} ${JEEa} \n",
 					"aws s3 cp ${Repo}/${WASi} ${WASi} \n",					
