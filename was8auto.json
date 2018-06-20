@@ -1,0 +1,226 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Description": "Deploy WebSphere Application Server v8 on AWS ",
+	"Parameters": {
+		"KeyName": {
+			"Description": "key for SSH access",
+			"Type": "AWS::EC2::KeyPair::KeyName",
+			"ConstraintDescription": "Must be an existing key pair."
+		},
+		"VPC": {
+			"Description": "The default VPC.",
+			"Type": "AWS::EC2::VPC::Id"
+		},
+		"SubnetA": {
+			"Description": "Select one of the available subnets.",
+			"Type": "AWS::EC2::Subnet::Id"
+		},	
+		"SubnetB": {
+			"Description": "Select a different subnet from above.",
+			"Type": "AWS::EC2::Subnet::Id"
+		},			
+		"WASimage": {
+			"Description": "The pre-built WebSphere Base image",
+			"Type": "String",
+			"Default": "was8.zip"
+		},
+		"JEEapp": {
+			"Description": "The name of J2EE applictaion ear.",
+			"Type": "String",
+			"Default": "pbw-ear.ear"
+		},
+		"DBarchive": {
+			"Description": "The data file to import, e.g, a Derby database archive",
+			"Type": "String",
+			"Default": "pbw-db.jar"		
+		},
+		"RepoSource": {
+			"Description": "The Source to download the software, e.g., s3://s3logme/img.",
+			"Type": "String",
+			"Default": "s3://s3logme/img"			
+		}
+	},
+	"Mappings": {
+		"EC2RegionMap": {
+			"us-east-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-14c5486b"},
+			"us-east-2": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-922914f7"},
+			"us-west-1": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-25110f45"},
+			"us-west-2": {"AmazonLinuxAMIHVMEBSBacked64bit": "ami-e251209a"}
+		}
+	},
+	"Resources": {
+		"PBWLoadBalancer" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
+			"Properties" : {
+			"Subnets": [{"Ref": "SubnetA"}, {"Ref": "SubnetB"}],
+			"SecurityGroups": [{"Ref": "LoadBalancerSecurityGroup"}]
+			}
+		},
+		"ALBListener" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::Listener",
+			"Properties" : {
+				"DefaultActions" : [{
+				"Type" : "forward",
+				"TargetGroupArn" : { "Ref" : "ALBTargetGroup" }
+				}],
+				"LoadBalancerArn" : { "Ref" : "PBWLoadBalancer" },
+				"Port" : "443",
+				"Protocol" : "HTTPS",
+				"Certificates" : ["pwbcert1"],
+				"SslPolicy": "ELBSecurityPolicy-2016-08"
+			}
+		},
+		"ALBTargetGroup" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+			"Properties" : {
+				"HealthCheckIntervalSeconds" : 10,
+				"HealthCheckTimeoutSeconds" : 5,
+				"HealthyThresholdCount" : 2,
+				"HealthCheckPath" : "/PlantsByWebSphere/login.jsf",
+				"Port" : 9080,
+				"Protocol" : "HTTP",
+				"UnhealthyThresholdCount" : 5,
+				"VpcId" : {"Ref" : "VPC"},
+				"TargetGroupAttributes" :
+					[{ "Key" : "stickiness.enabled", "Value" : "true" },
+					{ "Key" : "stickiness.type", "Value" : "lb_cookie" },
+					{ "Key" : "stickiness.lb_cookie.duration_seconds", "Value" : "30" }]
+			}
+		},
+		"LoadBalancerSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "PBW web load balancer",
+				"VpcId": {"Ref": "VPC"},
+				"SecurityGroupIngress": [{
+					"CidrIp": "0.0.0.0/0",
+					"FromPort": 443,
+					"IpProtocol": "tcp",
+					"ToPort": 443
+				}]
+			}
+		},
+	    "WebAppServerSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Enable the SSH and web admin access and web application access",
+				"VpcId": {"Ref": "VPC"},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": "22",
+						"ToPort": "22",
+						"CidrIp": "0.0.0.0/0"
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": "9443",
+						"ToPort": "9443",
+						"CidrIp": "0.0.0.0/0"
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": "9043",
+						"ToPort": "9043",
+						"CidrIp": "0.0.0.0/0"
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": "9080",
+						"ToPort": "9080",
+						"SourceSecurityGroupId": {"Ref": "LoadBalancerSecurityGroup"}
+					}
+				]
+			}
+		},
+		"ServiceAccessProfile": {
+			"Type": "AWS::IAM::InstanceProfile",
+			"Properties": {
+				"Path": "/",
+				"Roles": [{"Ref": "AccessS3"}]
+			}
+		},
+		"AccessS3": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [{
+						"Effect": "Allow",
+						"Principal": {
+							"Service": ["ec2.amazonaws.com"]
+						},
+						"Action": ["sts:AssumeRole"]
+					}]
+				},
+				"Path": "/",
+				"Policies": [{
+					"PolicyName": "s3access",
+					"PolicyDocument": {
+						"Version": "2012-10-17",
+						"Statement": [{
+                           "Action": [
+                               "s3:Get*",
+                               "s3:List*"
+                                ],
+                        "Effect": "Allow",
+                        "Resource": "*"
+						}]
+					}
+				}]
+			}
+		},
+		"PBWLaunchConfiguration": {
+			"Type": "AWS::AutoScaling::LaunchConfiguration",
+			"Properties": {
+				"InstanceType": "t2.micro",
+				"SecurityGroups": [{"Ref": "WebAppServerSecurityGroup"}],
+				"IamInstanceProfile": {"Ref": "ServiceAccessProfile"},				
+				"KeyName": {"Ref": "KeyName"},
+				"AssociatePublicIpAddress": true,				
+				"ImageId": {"Fn::FindInMap": ["EC2RegionMap", {"Ref": "AWS::Region"}, "AmazonLinuxAMIHVMEBSBacked64bit"]},
+				"UserData": {"Fn::Base64": {"Fn::Join": ["", [
+					"#!/bin/bash -ex\n",
+					"cd /tmp\n",
+					"echo Download start...\n",
+					"Repo=", {"Ref": "RepoSource"}, "\n",
+					"DBar=", {"Ref": "DBarchive"}, "\n",
+					"JEEa=",{"Ref": "JEEapp"}, "\n",
+					"WASi=",{"Ref": "WASimage"}, "\n",
+					"aws s3 cp ${Repo}/${DBar} ${DBar} \n",
+					"aws s3 cp ${Repo}/${JEEa} ${JEEa} \n",
+					"aws s3 cp ${Repo}/${WASi} ${WASi} \n",					
+					"echo Download finish.\n",
+					"wget https://s3.amazonaws.com/s3logme/img/was8deploy.sh && chmod 750 was8deploy.sh \n",
+					"./was8deploy.sh ${WASi} ${DBar} ${JEEa} \n",
+					"rm -f was8deploy.sh; echo Deploy finish at `date`.\n",
+					"/opt/aws/bin/cfn-signal -e $? --stack ", {"Ref": "AWS::StackName"}, " --resource AutoScalingGroup --region ", {"Ref": "AWS::Region"}, "\n"					
+				]]}}
+			}
+		},
+		"AutoScalingGroup": {
+			"Type": "AWS::AutoScaling::AutoScalingGroup",
+			"Properties": {
+				"LoadBalancerNames": [{"Ref": "PBWLoadBalancer"}],
+				"LaunchConfigurationName": {"Ref": "PBWLaunchConfiguration"},
+				"MinSize": "1",
+				"MaxSize": "2",
+				"DesiredCapacity": "2",
+				"VPCZoneIdentifier": [{"Ref": "SubnetA"}, {"Ref": "SubnetB"}],
+				"HealthCheckGracePeriod": "600",
+				"HealthCheckType": "EC2"				
+			},
+			"CreationPolicy": {
+				"ResourceSignal": {
+					"Timeout": "PT20M"
+				}
+			}
+		}
+	},
+	"Outputs": {
+		"WebAppURL": {
+			"Value": {"Fn::Join": ["", ["http://", {"Fn::GetAtt": ["PBWLoadBalancer", "DNSName"]}]]},
+			"Description": "The LB URL"
+		}
+	}
+}
