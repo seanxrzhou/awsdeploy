@@ -11,10 +11,14 @@
 			"Description": "The default VPC.",
 			"Type": "AWS::EC2::VPC::Id"
 		},
-		"Subnet": {
+		"SubnetA": {
 			"Description": "Select one of the available subnets.",
 			"Type": "AWS::EC2::Subnet::Id"
-		},
+		},	
+		"SubnetB": {
+			"Description": "Select a different subnet from above.",
+			"Type": "AWS::EC2::Subnet::Id"
+		},			
 		"WASimage": {
 			"Description": "The pre-built WebSphere Base image",
 			"Type": "String",
@@ -45,7 +49,58 @@
 		}
 	},
 	"Resources": {
-		"WebAppServerSecurityGroup": {
+		"PBWLoadBalancer" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
+			"Properties" : {
+			"Subnets": [{"Ref": "SubnetA"}, {"Ref": "SubnetB"}],
+			"SecurityGroups": [{"Ref": "LoadBalancerSecurityGroup"}]
+			}
+		},
+		"ALBListener" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::Listener",
+			"Properties" : {
+				"DefaultActions" : [{
+				"Type" : "forward",
+				"TargetGroupArn" : { "Ref" : "ALBTargetGroup" }
+				}],
+				"LoadBalancerArn" : { "Ref" : "PBWLoadBalancer" },
+				"Port" : "443",
+				"Protocol" : "HTTPS",
+				"Certificates" : ["pwbcert1"],
+				"SslPolicy": "ELBSecurityPolicy-2016-08"
+			}
+		},
+		"ALBTargetGroup" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+			"Properties" : {
+				"HealthCheckIntervalSeconds" : 10,
+				"HealthCheckTimeoutSeconds" : 5,
+				"HealthyThresholdCount" : 2,
+				"HealthCheckPath" : "/PlantsByWebSphere/login.jsf",
+				"Port" : 9080,
+				"Protocol" : "HTTP",
+				"UnhealthyThresholdCount" : 5,
+				"VpcId" : {"Ref" : "VPC"},
+				"TargetGroupAttributes" :
+					[{ "Key" : "stickiness.enabled", "Value" : "true" },
+					{ "Key" : "stickiness.type", "Value" : "lb_cookie" },
+					{ "Key" : "stickiness.lb_cookie.duration_seconds", "Value" : "30" }]
+			}
+		},
+		"LoadBalancerSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "PBW web load balancer",
+				"VpcId": {"Ref": "VPC"},
+				"SecurityGroupIngress": [{
+					"CidrIp": "0.0.0.0/0",
+					"FromPort": 443,
+					"IpProtocol": "tcp",
+					"ToPort": 443
+				}]
+			}
+		},
+	    "WebAppServerSecurityGroup": {
 			"Type": "AWS::EC2::SecurityGroup",
 			"Properties": {
 				"GroupDescription": "Enable the SSH and web admin access and web application access",
@@ -73,8 +128,8 @@
 						"IpProtocol": "tcp",
 						"FromPort": "9080",
 						"ToPort": "9080",
-						"CidrIp": "0.0.0.0/0"
-					}					
+						"SourceSecurityGroupId": {"Ref": "LoadBalancerSecurityGroup"}
+					}
 				]
 			}
 		},
@@ -115,15 +170,15 @@
 				}]
 			}
 		},
-		"EC2Instance": {
-			"Type": "AWS::EC2::Instance",
+		"PBWLaunchConfiguration": {
+			"Type": "AWS::AutoScaling::LaunchConfiguration",
 			"Properties": {
 				"InstanceType": "t2.micro",
-				"SecurityGroupIds": [{"Ref": "WebAppServerSecurityGroup"}],
+				"SecurityGroups": [{"Ref": "WebAppServerSecurityGroup"}],
 				"IamInstanceProfile": {"Ref": "ServiceAccessProfile"},				
 				"KeyName": {"Ref": "KeyName"},
+				"AssociatePublicIpAddress": true,				
 				"ImageId": {"Fn::FindInMap": ["EC2RegionMap", {"Ref": "AWS::Region"}, "AmazonLinuxAMIHVMEBSBacked64bit"]},
-				"SubnetId": {"Ref": "Subnet"},
 				"UserData": {"Fn::Base64": {"Fn::Join": ["", [
 					"#!/bin/bash -ex\n",
 					"cd /tmp\n",
@@ -138,24 +193,34 @@
 					"echo Download finish.\n",
 					"wget https://s3.amazonaws.com/s3logme/img/was8deploy.sh && chmod 750 was8deploy.sh \n",
 					"./was8deploy.sh ${WASi} ${DBar} ${JEEa} \n",
-					"rm -f was8deploy.sh; echo Deploy finish at `date`.\n"
+					"rm -f was8deploy.sh; echo Deploy finish at `date`.\n",
+					"/opt/aws/bin/cfn-signal -e $? --stack ", {"Ref": "AWS::StackName"}, " --resource AutoScalingGroup --region ", {"Ref": "AWS::Region"}, "\n"					
 				]]}}
+			}
+		},
+		"AutoScalingGroup": {
+			"Type": "AWS::AutoScaling::AutoScalingGroup",
+			"Properties": {
+				"LoadBalancerNames": [{"Ref": "PBWLoadBalancer"}],
+				"LaunchConfigurationName": {"Ref": "PBWLaunchConfiguration"},
+				"MinSize": "1",
+				"MaxSize": "2",
+				"DesiredCapacity": "2",
+				"VPCZoneIdentifier": [{"Ref": "SubnetA"}, {"Ref": "SubnetB"}],
+				"HealthCheckGracePeriod": "600",
+				"HealthCheckType": "EC2"				
+			},
+			"CreationPolicy": {
+				"ResourceSignal": {
+					"Timeout": "PT20M"
+				}
 			}
 		}
 	},
 	"Outputs": {
-		"ServerIP": {
-			"Description": "Public IP address of the was8 server",
-			"Value": {"Fn::GetAtt": ["EC2Instance", "PublicIp"]}
-		},
-
 		"WebAppURL": {
-			"Value": {"Fn::Join": ["", ["https://", {"Fn::GetAtt": ["EC2Instance", "PublicIp"]}, ":9443", "/PlantsByWebSphere"]]},
-			"Description": "PlantsByWebSphere application URL"
-		},
-		"AdminURL": {
-			"Value": {"Fn::Join": ["", ["https://", {"Fn::GetAtt": ["EC2Instance", "PublicIp"]}, ":9043", "/ibm/console"]]},
-			"Description": "PlantsByWebSphere application URL"
-		}		
+			"Value": {"Fn::Join": ["", ["http://", {"Fn::GetAtt": ["PBWLoadBalancer", "DNSName"]}]]},
+			"Description": "The LB URL"
+		}
 	}
 }

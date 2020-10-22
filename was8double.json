@@ -17,23 +17,19 @@
 		},
 		"WASimage": {
 			"Description": "The pre-built WebSphere Base image",
-			"Type": "String",
-			"Default": "was8.zip"
+			"Type": "String"
 		},
 		"JEEapp": {
 			"Description": "The name of J2EE applictaion ear.",
-			"Type": "String",
-			"Default": "pbw-ear.ear"
+			"Type": "String"
 		},
 		"DBarchive": {
 			"Description": "The data file to import, e.g, a Derby database archive",
-			"Type": "String",
-			"Default": "pbw-db.jar"		
+			"Type": "String"
 		},
 		"RepoSource": {
 			"Description": "The Source to download the software, e.g., s3://s3logme/img.",
-			"Type": "String",
-			"Default": "s3://s3logme/img"			
+			"Type": "String"
 		}
 	},
 	"Mappings": {
@@ -68,13 +64,7 @@
 						"FromPort": "9043",
 						"ToPort": "9043",
 						"CidrIp": "0.0.0.0/0"
-					},
-					{
-						"IpProtocol": "tcp",
-						"FromPort": "9080",
-						"ToPort": "9080",
-						"CidrIp": "0.0.0.0/0"
-					}					
+					}
 				]
 			}
 		},
@@ -128,10 +118,10 @@
 					"#!/bin/bash -ex\n",
 					"cd /tmp\n",
 					"echo Download start...\n",
-					"Repo=", {"Ref": "RepoSource"}, "\n",
-					"DBar=", {"Ref": "DBarchive"}, "\n",
-					"JEEa=",{"Ref": "JEEapp"}, "\n",
-					"WASi=",{"Ref": "WASimage"}, "\n",
+					"Repo=",{"Ref": "RepoSource"}\n",
+					"DBar=",{"Ref": "DBarchive"}\n",
+					"JEEa=",{"Ref": "JEEapp"}\n",
+					"WASi=",{"Ref": "WASimage"}\n",
 					"aws s3 cp ${Repo}/${DBar} ${DBar} \n",
 					"aws s3 cp ${Repo}/${JEEa} ${JEEa} \n",
 					"aws s3 cp ${Repo}/${WASi} ${WASi} \n",					
